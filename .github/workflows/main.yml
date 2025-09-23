@@ -7,55 +7,41 @@ on:
     branches: [ main ]
 
 jobs:
-  build-native:
-    strategy:
-      matrix:
-        include:
-          - arch: x86_64
-            python_arch: x64
-          - arch: i686
-            python_arch: x86
+  # Job 1: Build for native, fully-supported x86_64. This is the fast path.
+  build-x86_64:
     runs-on: ubuntu-latest
-    name: Build for ${{ matrix.arch }}
+    name: Build for x86_64
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup Python ${{ matrix.python_arch }}
+    - name: Setup Python for x64
       uses: actions/setup-python@v6
       with:
         python-version: '3.13'
-        architecture: ${{ matrix.python_arch }}
+        architecture: 'x64'
 
     - name: Install build dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y clang mold gcc-multilib g++-multilib
+      run: sudo apt-get update && sudo apt-get install -y clang mold
 
     - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pillow nuitka
+      run: python -m pip install --upgrade pip pillow nuitka
 
     - name: Compile module with Nuitka
-      run: |
-        LDFLAGS="-fuse-ld=mold" python -m nuitka \
-          --module \
-          --clang \
-          --lto=yes \
-          main.py
+      run: LDFLAGS="-fuse-ld=mold" python -m nuitka --module --clang --lto=yes main.py
     
-    - name: Rename artifact
-      run: mv main.so main-${{ matrix.arch }}.so
+    - name: Rename artifact for upload
+      run: mv main.*.so main-x86_64.so
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: compiled-module-${{ matrix.arch }}
-        path: main-${{ matrix.arch }}.so
+        name: compiled-module-x86_64
+        path: main-x86_64.so
 
-  build-qemu:
+  # Job 2: Build for other architectures using Docker, QEMU, and building Python from source when needed.
+  build-cross-compile:
     strategy:
       matrix:
         include:
@@ -63,26 +49,50 @@ jobs:
             image: arm64v8/ubuntu:22.04
           - arch: armv7
             image: arm32v7/ubuntu:22.04
+          - arch: i686
+            image: i386/ubuntu:22.04 # Correct image for 32-bit x86
     runs-on: ubuntu-latest
-    name: Build for ${{ matrix.arch }} (QEMU)
+    name: Build for ${{ matrix.arch }} (Containerized)
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
+      - name: Set up QEMU (for ARM builds)
         uses: docker/setup-qemu-action@v3
 
       - name: Compile module in Docker container
         run: |
           docker run --rm -v "${{ github.workspace }}":/ws -w /ws ${{ matrix.image }} bash -c '
+            set -e # Exit immediately if a command exits with a non-zero status.
             export DEBIAN_FRONTEND=noninteractive
-            echo "--- Installing dependencies ---"
+            echo "--- Installing base dependencies ---"
             apt-get update
-            apt-get install -y software-properties-common
-            add-apt-repository ppa:deadsnakes/ppa
-            apt-get update
-            apt-get install -y python3.13-full clang mold build-essential
+            apt-get install -y build-essential software-properties-common wget
+
+            # --- Conditional Python Installation ---
+            # For aarch64, the PPA is fast and works perfectly.
+            if [ "${{ matrix.arch }}" = "aarch64" ]; then
+              echo "--- Installing Python 3.13 from PPA for aarch64 ---"
+              add-apt-repository ppa:deadsnakes/ppa -y
+              apt-get update
+              apt-get install -y python3.13-full clang mold
+            
+            # For armv7 and i686, we must build Python from source.
+            else
+              echo "--- Building Python 3.13 from source for ${{ matrix.arch }} ---"
+              # Install dependencies needed to build Python
+              apt-get install -y libssl-dev zlib1g-dev libffi-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev clang mold
+              cd /tmp
+              wget https://www.python.org/ftp/python/3.13.0/Python-3.13.0.tar.xz
+              tar -xf Python-3.13.0.tar.xz
+              cd Python-3.13.0
+              ./configure --enable-optimizations
+              make -j$(nproc)
+              make altinstall
+              # Clean up to save space on the runner
+              cd / && rm -rf /tmp/Python-3.13.0*
+            fi
             
             echo "--- Installing Python packages ---"
             python3.13 -m pip install --upgrade pip
@@ -97,13 +107,11 @@ jobs:
             
             echo "--- Build complete ---"
           '
-      # FIX: Rename the output file to make it unique for this architecture
-      - name: Rename artifact
-        run: mv main.so main-${{ matrix.arch }}.so
+      - name: Rename artifact for upload
+        run: mv main.*.so main-${{ matrix.arch }}.so
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: compiled-module-${{ matrix.arch }}
-          # FIX: Point to the specific, renamed file path
           path: main-${{ matrix.arch }}.so
