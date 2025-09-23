@@ -14,10 +14,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v5
 
-    - name: 1. Setup Python 3.13.7t
+    - name: 1. Setup Python 3.13.7
       uses: actions/setup-python@v6
       with:
-        python-version: '3.13.7t'
+        python-version: '3.13.7'
 
     - name: Install dependencies
       run: |
