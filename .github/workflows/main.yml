@@ -1,4 +1,4 @@
-name: Python Build and Compile
+name: Python Build, Compile, and Save Module
 
 on:
   push:
@@ -12,12 +12,12 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
-    - name: 1. Setup Python 3.14.0-rc.3
+    - name: 1. Setup Python 3.13.7t
       uses: actions/setup-python@v6
       with:
-        python-version: '3.14.0-rc.3'
+        python-version: '3.13.7t'
 
     - name: Install dependencies
       run: |
@@ -53,13 +53,27 @@ jobs:
           exit 1
         fi
 
-    - name: 3. Compile with Nuitka
+    - name: 3. Compile to a module with Nuitka
       run: |
         # Install Clang and the Mold linker
         sudo apt-get update && sudo apt-get install -y clang mold
 
-        # Compile main.py using Nuitka with specified options
+        # Compile main.py into an extension module (main.so)
+        echo "Compiling main.py to an extension module..."
         LDFLAGS="-fuse-ld=mold" python -m nuitka \
+          --module \
           --clang \
           --lto=yes \
           main.py
+        
+        # List the files to show the generated .so file
+        echo "Compilation finished. Listing files:"
+        ls -l
+
+    - name: 4. Save compiled module
+      uses: actions/upload-artifact@v4
+      with:
+        # Name of the artifact to be uploaded
+        name: compiled-module
+        # Path to the file to upload. Nuitka creates a .so file on Linux.
+        path: main.so
