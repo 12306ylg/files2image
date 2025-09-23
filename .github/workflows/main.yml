@@ -97,9 +97,13 @@ jobs:
             
             echo "--- Build complete ---"
           '
+      # FIX: Rename the output file to make it unique for this architecture
+      - name: Rename artifact
+        run: mv main.so main-${{ matrix.arch }}.so
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: compiled-module-${{ matrix.arch }}
-          path: main.*.so
+          # FIX: Point to the specific, renamed file path
+          path: main-${{ matrix.arch }}.so
