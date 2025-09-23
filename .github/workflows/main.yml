@@ -1,4 +1,4 @@
-name: Python Build, Compile, and Save Module
+name: Build for Multiple Architectures
 
 on:
   push:
@@ -7,73 +7,99 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  build-native:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            python_arch: x64
+          - arch: i686
+            python_arch: x86
     runs-on: ubuntu-latest
-
+    name: Build for ${{ matrix.arch }}
+    
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v4
 
-    - name: 1. Setup Python 3.13.7
+    - name: Setup Python ${{ matrix.python_arch }}
       uses: actions/setup-python@v6
       with:
-        python-version: '3.13.7'
+        python-version: '3.13'
+        architecture: ${{ matrix.python_arch }}
 
-    - name: Install dependencies
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang mold gcc-multilib g++-multilib
+
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install pillow nuitka
 
-    - name: 2. Test file conversion
+    - name: Compile module with Nuitka
       run: |
-        # Create a runner script to execute the test logic
-        cat <<EOF > run_test.py
-        from main import file_to_image, image_to_file
-        import sys
-
-        try:
-            print("Converting main.py to test.png...")
-            file_to_image('main.py', 'test.png')
-            print("Converting test.png back to test.py...")
-            image_to_file('test.png', 'test.py')
-        except Exception as e:
-            print(f"An error occurred during conversion: {e}")
-            sys.exit(1)
-        EOF
-
-        # Execute the test
-        python run_test.py
-
-        # Verify that the original and the converted file are identical
-        echo "Comparing main.py and test.py for differences..."
-        if diff main.py test.py; then
-          echo "✅ Test Passed: Files are identical."
-        else
-          echo "❌ Test Failed: Files are different."
-          exit 1
-        fi
-
-    - name: 3. Compile to a module with Nuitka
-      run: |
-        # Install Clang and the Mold linker
-        sudo apt-get update && sudo apt-get install -y clang mold
-
-        # Compile main.py into an extension module (main.so)
-        echo "Compiling main.py to an extension module..."
         LDFLAGS="-fuse-ld=mold" python -m nuitka \
           --module \
           --clang \
           --lto=yes \
           main.py
-        
-        # List the files to show the generated .so file
-        echo "Compilation finished. Listing files:"
-        ls -l
+    
+    - name: Rename artifact
+      run: mv main.so main-${{ matrix.arch }}.so
 
-    - name: 4. Save compiled module
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        # Name of the artifact to be uploaded
-        name: compiled-module
-        # Path to the file to upload. Nuitka creates a .so file on Linux.
-        path: main.so
+        name: compiled-module-${{ matrix.arch }}
+        path: main-${{ matrix.arch }}.so
+
+  build-qemu:
+    strategy:
+      matrix:
+        include:
+          - arch: aarch64
+            image: arm64v8/ubuntu:22.04
+          - arch: armv7
+            image: arm32v7/ubuntu:22.04
+    runs-on: ubuntu-latest
+    name: Build for ${{ matrix.arch }} (QEMU)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Compile module in Docker container
+        run: |
+          docker run --rm -v "${{ github.workspace }}":/ws -w /ws ${{ matrix.image }} bash -c '
+            export DEBIAN_FRONTEND=noninteractive
+            echo "--- Installing dependencies ---"
+            apt-get update
+            apt-get install -y software-properties-common
+            add-apt-repository ppa:deadsnakes/ppa
+            apt-get update
+            apt-get install -y python3.13-full clang mold build-essential
+            
+            echo "--- Installing Python packages ---"
+            python3.13 -m pip install --upgrade pip
+            python3.13 -m pip install nuitka pillow
+
+            echo "--- Compiling with Nuitka ---"
+            LDFLAGS="-fuse-ld=mold" python3.13 -m nuitka \
+              --module \
+              --clang \
+              --lto=yes \
+              main.py
+            
+            echo "--- Build complete ---"
+          '
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-module-${{ matrix.arch }}
+          path: main.*.so
