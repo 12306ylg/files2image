@@ -1,0 +1,65 @@
+name: Python Build and Compile
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: 1. Setup Python 3.14.0-rc.3
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.14.0-rc.3'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pillow nuitka
+
+    - name: 2. Test file conversion
+      run: |
+        # Create a runner script to execute the test logic
+        cat <<EOF > run_test.py
+        from main import file_to_image, image_to_file
+        import sys
+
+        try:
+            print("Converting main.py to test.png...")
+            file_to_image('main.py', 'test.png')
+            print("Converting test.png back to test.py...")
+            image_to_file('test.png', 'test.py')
+        except Exception as e:
+            print(f"An error occurred during conversion: {e}")
+            sys.exit(1)
+        EOF
+
+        # Execute the test
+        python run_test.py
+
+        # Verify that the original and the converted file are identical
+        echo "Comparing main.py and test.py for differences..."
+        if diff main.py test.py; then
+          echo "✅ Test Passed: Files are identical."
+        else
+          echo "❌ Test Failed: Files are different."
+          exit 1
+        fi
+
+    - name: 3. Compile with Nuitka
+      run: |
+        # Install Clang and the Mold linker
+        sudo apt-get update && sudo apt-get install -y clang mold
+
+        # Compile main.py using Nuitka with specified options
+        LDFLAGS="-fuse-ld=mold" python -m nuitka \
+          --clang \
+          --lto=yes \
+          main.py
