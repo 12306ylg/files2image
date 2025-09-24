@@ -47,37 +47,39 @@ jobs:
         include:
           - arch: aarch64
             image: arm64v8/ubuntu:22.04
+            platform: linux/arm64
           - arch: armv7
             image: arm32v7/ubuntu:22.04
+            platform: linux/arm/v7
           - arch: i686
             image: i386/ubuntu:22.04
+            platform: linux/386
     runs-on: ubuntu-latest
     name: Build for ${{ matrix.arch }} (Containerized)
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+
+      # Revert to setup-qemu-action, which is the correct tool for enabling 'docker run' emulation.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Compile module in Docker container
+        # THE FIX: Add the '--platform' flag to explicitly tell Docker which architecture to run.
         run: |
-          docker run --rm -v "${{ github.workspace }}":/ws -w /ws ${{ matrix.image }} bash -c '
-            set -e # Exit immediately if a command exits with a non-zero status.
+          docker run --rm --platform ${{ matrix.platform }} -v "${{ github.workspace }}":/ws -w /ws ${{ matrix.image }} bash -c '
+            set -e
             export DEBIAN_FRONTEND=noninteractive
             echo "--- Installing base dependencies ---"
             apt-get update
             apt-get install -y build-essential software-properties-common wget
 
-            # --- Conditional Python Installation ---
-            # For aarch64, the PPA is fast and works.
             if [ "${{ matrix.arch }}" = "aarch64" ]; then
               echo "--- Installing Python 3.13 from PPA for aarch64 ---"
               add-apt-repository ppa:deadsnakes/ppa -y
               apt-get update
               apt-get install -y python3.13-full clang mold
-            
-            # For armv7 and i686, we must build Python from source.
             else
               echo "--- Building Python 3.13 from source for ${{ matrix.arch }} ---"
               apt-get install -y libssl-dev zlib1g-dev libffi-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev clang mold
@@ -96,11 +98,7 @@ jobs:
             python3.13 -m pip install nuitka pillow
 
             echo "--- Compiling with Nuitka ---"
-            LDFLAGS="-fuse-ld=mold" python3.13 -m nuitka \
-              --module \
-              --clang \
-              --lto=yes \
-              main.py
+            LDFLAGS="-fuse-ld=mold" python3.13 -m nuitka --module --clang --lto=yes main.py
             
             echo "--- Build complete ---"
           '
