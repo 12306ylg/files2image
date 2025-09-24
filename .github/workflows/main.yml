@@ -1,4 +1,4 @@
-name: Python Build (x86_64 on Plucky with Latest Clang)
+name: Python Build (x86_64 on Plucky with lld Linker)
 
 on:
   push:
@@ -37,7 +37,6 @@ jobs:
         done
 
         echo "### 2. Adding the LLVM APT repository for 'plucky'..."
-        sudo apt-get update && sudo apt-get install -y gnupg wget
         sudo mkdir -p /etc/apt/keyrings
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/llvm-snapshot.gpg
         echo "deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] http://apt.llvm.org/plucky/ llvm-toolchain-plucky main" | sudo tee /etc/apt/sources.list.d/llvm.list
@@ -48,9 +47,8 @@ jobs:
         echo "### 4. Performing full system upgrade to 'plucky'..."
         sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" full-upgrade -y
         
-        echo "### 5. Installing clang, mold, and specific LLVM linker tools..."
-        # THE FIX: Install the specific package for the linker plugin.
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang mold llvm-22-linker-tools
+        echo "### 5. Installing clang and lld..."
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang lld
         clang --version
 
     - name: Setup Python 3.13 for x64
@@ -65,7 +63,8 @@ jobs:
 
     - name: Compile module with Nuitka
       run: |
-        LDFLAGS="-fuse-ld=mold" python -m nuitka \
+        # Use the lld linker instead of mold
+        LDFLAGS="-fuse-ld=lld" python -m nuitka \
           --module \
           --clang \
           --lto=yes \
