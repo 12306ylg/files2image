@@ -18,28 +18,19 @@ jobs:
     - name: Prepare System Environment (Global Plucky Upgrade with Exceptions)
       run: |
         echo "### 1. Applying 'noble' -> 'plucky' replacement with exceptions..."
-        
-        # Handle the main sources file first
         sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list
-
-        # Iterate through all source files in the .d directory for surgical replacement
         for f in /etc/apt/sources.list.d/*; do
           if [ -f "$f" ]; then
-            # EXCEPTION: Do not touch the azure-cli repository file
             if [[ "$f" == *azure-cli* ]]; then
               echo "-> Skipping Azure CLI repository: $f"
               continue
             fi
-            
-            # RULE: Handle the Microsoft products repository specifically
             if [[ "$f" == *microsoft-prod* ]]; then
               echo "-> Applying Microsoft repo fix to $f (24.04->25.04, noble->plucky)"
               sudo sed -i 's/ubuntu\/24.04\/prod/ubuntu\/25.04\/prod/g' "$f"
               sudo sed -i 's/noble/plucky/g' "$f"
-              continue # Move to next file
+              continue
             fi
-            
-            # DEFAULT RULE: Apply standard noble -> plucky for all other files
             echo "-> Applying general noble->plucky replacement to $f"
             sudo sed -i 's/noble/plucky/g' "$f"
           fi
@@ -57,8 +48,8 @@ jobs:
         echo "### 4. Performing full system upgrade to 'plucky'..."
         sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" full-upgrade -y
         
-        echo "### 5. Installing latest clang and mold..."
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang mold
+        echo "### 5. Installing  clang, mold, and LLVM toolchain..."
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang mold llvm
         clang --version
 
     - name: Setup Python 3.13 for x64
