@@ -1,4 +1,4 @@
-name: Python Build (x86_64)
+name: Python Build (x86_64 on Plucky)
 
 on:
   push:
@@ -15,6 +15,21 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Switch to Plucky and Full Upgrade System
+      run: |
+        echo "### Changing APT sources from noble to plucky..."
+        sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list
+        # The following command may fail if no lists are in the .d directory, so we add a failsafe
+        sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list.d/*.list || echo "No files in sources.list.d to modify."
+        
+        echo "### Updating package lists from plucky repositories..."
+        sudo apt-get update
+        
+        echo "### Performing full system upgrade to plucky..."
+        sudo DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -y
+        
+        echo "### System upgrade complete."
+
     - name: Setup Python 3.13 for x64
       uses: actions/setup-python@v6
       with:
@@ -23,7 +38,6 @@ jobs:
 
     - name: Install build dependencies
       run: |
-        sudo apt-get update
         sudo apt-get install -y clang mold
 
     - name: Install Python dependencies
