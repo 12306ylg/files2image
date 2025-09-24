@@ -48,8 +48,9 @@ jobs:
         echo "### 4. Performing full system upgrade to 'plucky'..."
         sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" full-upgrade -y
         
-        echo "### 5. Installing  clang, mold, and LLVM toolchain..."
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang mold llvm
+        echo "### 5. Installing clang, mold, and specific LLVM linker tools..."
+        # THE FIX: Install the specific package for the linker plugin.
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang mold llvm-22-linker-tools
         clang --version
 
     - name: Setup Python 3.13 for x64
