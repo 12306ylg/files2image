@@ -17,25 +17,31 @@ jobs:
 
     - name: Prepare System Environment (Global Plucky Upgrade)
       run: |
-        echo "### 1. Handling APT source lists for Plucky upgrade..."
-        # Second, globally replace 'noble' with 'plucky' in the main OS sources.
+        echo "### 1. Correctly applying global 'noble' -> 'plucky' replacement..."
+        # Target the main file AND all files in the sources.list.d directory
         sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list
+        sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list.d/*.sources
+        sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list.d/*.list
 
-        echo "### 2. Adding the LLVM APT repository using the modern GPG key method..."
-        # Create the standard directory for keyring files if it doesn't exist.
+        echo "### 2. Applying specific fix for Microsoft repository..."
+        MS_REPO_FILE="/etc/apt/sources.list.d/microsoft-prod.list"
+        if [ -f "$MS_REPO_FILE" ]; then
+          sudo sed -i 's/ubuntu\/24.04\/prod/ubuntu\/25.04\/prod/g' "$MS_REPO_FILE"
+        fi
+
+        echo "### 3. Adding the LLVM APT repository using the modern GPG key method..."
+        sudo apt-get update && sudo apt-get install -y gnupg wget # Ensure dependencies are present
         sudo mkdir -p /etc/apt/keyrings
-        # Download the GPG key, de-armor it, and save it to the keyrings directory.
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/llvm-snapshot.gpg
-        # Create the APT source list file, explicitly pointing to the signed-by key.
         echo "deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] http://apt.llvm.org/plucky/ llvm-toolchain-plucky main" | sudo tee /etc/apt/sources.list.d/llvm.list
 
-        echo "### 3. Updating package lists for the new 'plucky' environment..."
+        echo "### 4. Updating package lists for the new 'plucky' environment..."
         sudo apt-get update
         
-        echo "### 4. Performing full system upgrade to 'plucky'..."
-        sudo DEBIAN_FRONTEND=noninteractive apt-get  full-upgrade -y
+        echo "### 5. Performing full system upgrade to 'plucky'..."
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" full-upgrade -y
         
-        echo "### 5. Installing latest clang and mold..."
+        echo "### 6. Installing latest clang and mold..."
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang mold
         clang --version
 
