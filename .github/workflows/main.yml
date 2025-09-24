@@ -17,30 +17,22 @@ jobs:
 
     - name: Prepare System Environment (Global Plucky Upgrade)
       run: |
-        echo "### 1. Globally replacing 'noble' with 'plucky' in core OS sources..."
+        echo "### 1. Handling APT source lists for Plucky upgrade..."
+        # First, remove third-party lists to prevent conflicts during the main upgrade.
+        sudo rm -f /etc/apt/sources.list.d/*
+        # Second, globally replace 'noble' with 'plucky' in the main OS sources.
         sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list
 
-        echo "### 2. Handling known third-party repositories..."
-        # Iterate through files in sources.list.d to apply specific fixes
-        for f in /etc/apt/sources.list.d/*.list; do
-          if [ -f "$f" ]; then
-            echo "Processing $f..."
-            # For Microsoft repositories, update both version and codename
-            if grep -q "packages.microsoft.com" "$f"; then
-              echo "-> Found Microsoft repo. Updating to 25.04/plucky."
-              sudo sed -i 's/ubuntu\/24.04\/prod/ubuntu\/25.04\/prod/g' "$f"
-              sudo sed -i 's/noble/plucky/g' "$f"
-            else
-              # For any other repo, apply the general noble -> plucky rule
-              echo "-> Applying general noble->plucky replacement."
-              sudo sed -i 's/noble/plucky/g' "$f"
-            fi
-          fi
-        done
+        echo "### 2. Installing prerequisites for adding repositories (gnupg)..."
+        sudo apt-get update && sudo apt-get install -y gnupg wget
 
-        echo "### 3. Adding the required LLVM APT repository for 'plucky'..."
-        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/llvm-snapshot.gpg > /dev/null
-        sudo apt-add-repository "deb http://apt.llvm.org/plucky/ llvm-toolchain-plucky main"
+        echo "### 3. Adding the LLVM APT repository using the modern GPG key method..."
+        # Create the standard directory for keyring files if it doesn't exist.
+        sudo mkdir -p /etc/apt/keyrings
+        # Download the GPG key, de-armor it, and save it to the keyrings directory.
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/llvm-snapshot.gpg
+        # Create the APT source list file, explicitly pointing to the signed-by key.
+        echo "deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] http://apt.llvm.org/plucky/ llvm-toolchain-plucky main" | sudo tee /etc/apt/sources.list.d/llvm.list
 
         echo "### 4. Updating package lists for the new 'plucky' environment..."
         sudo apt-get update
