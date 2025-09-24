@@ -13,7 +13,7 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Prepare System Environment (Global Plucky Upgrade with Exceptions)
       run: |
@@ -63,7 +63,6 @@ jobs:
 
     - name: Compile module with Nuitka
       run: |
-        # Use the lld linker instead of mold
         LDFLAGS="-fuse-ld=lld" python -m nuitka \
           --module \
           --clang \
