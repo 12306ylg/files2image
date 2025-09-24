@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  # Job 1: Build for native, fully-supported x86_64. This is the fast path.
+  # Job 1: Build for native, fully-supported x86_64.
   build-x86_64:
     runs-on: ubuntu-latest
     name: Build for x86_64
@@ -40,7 +40,7 @@ jobs:
         name: compiled-module-x86_64
         path: main-x86_64.so
 
-  # Job 2: Build for other architectures using Docker, QEMU, and building Python from source when needed.
+  # Job 2: Build for other architectures using a containerized environment.
   build-cross-compile:
     strategy:
       matrix:
@@ -50,16 +50,15 @@ jobs:
           - arch: armv7
             image: arm32v7/ubuntu:22.04
           - arch: i686
-            image: i386/ubuntu:22.04 # Correct image for 32-bit x86
+            image: i386/ubuntu:22.04
     runs-on: ubuntu-latest
     name: Build for ${{ matrix.arch }} (Containerized)
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up QEMU (for ARM builds)
-        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Compile module in Docker container
         run: |
@@ -71,7 +70,7 @@ jobs:
             apt-get install -y build-essential software-properties-common wget
 
             # --- Conditional Python Installation ---
-            # For aarch64, the PPA is fast and works perfectly.
+            # For aarch64, the PPA is fast and works.
             if [ "${{ matrix.arch }}" = "aarch64" ]; then
               echo "--- Installing Python 3.13 from PPA for aarch64 ---"
               add-apt-repository ppa:deadsnakes/ppa -y
@@ -81,7 +80,6 @@ jobs:
             # For armv7 and i686, we must build Python from source.
             else
               echo "--- Building Python 3.13 from source for ${{ matrix.arch }} ---"
-              # Install dependencies needed to build Python
               apt-get install -y libssl-dev zlib1g-dev libffi-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev clang mold
               cd /tmp
               wget https://www.python.org/ftp/python/3.13.0/Python-3.13.0.tar.xz
@@ -90,7 +88,6 @@ jobs:
               ./configure --enable-optimizations
               make -j$(nproc)
               make altinstall
-              # Clean up to save space on the runner
               cd / && rm -rf /tmp/Python-3.13.0*
             fi
             
