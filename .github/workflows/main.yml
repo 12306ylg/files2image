@@ -21,10 +21,7 @@ jobs:
         # Second, globally replace 'noble' with 'plucky' in the main OS sources.
         sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list
 
-        echo "### 2. Installing prerequisites for adding repositories (gnupg)..."
-        sudo apt-get update && sudo apt-get install -y gnupg wget
-
-        echo "### 3. Adding the LLVM APT repository using the modern GPG key method..."
+        echo "### 2. Adding the LLVM APT repository using the modern GPG key method..."
         # Create the standard directory for keyring files if it doesn't exist.
         sudo mkdir -p /etc/apt/keyrings
         # Download the GPG key, de-armor it, and save it to the keyrings directory.
@@ -32,23 +29,20 @@ jobs:
         # Create the APT source list file, explicitly pointing to the signed-by key.
         echo "deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] http://apt.llvm.org/plucky/ llvm-toolchain-plucky main" | sudo tee /etc/apt/sources.list.d/llvm.list
 
-        echo "### 4. Updating package lists for the new 'plucky' environment..."
+        echo "### 3. Updating package lists for the new 'plucky' environment..."
         sudo apt-get update
         
-        echo "### 5. Performing full system upgrade to 'plucky'..."
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" full-upgrade -y
+        echo "### 4. Performing full system upgrade to 'plucky'..."
+        sudo DEBIAN_FRONTEND=noninteractive apt-get  full-upgrade -y
         
-        echo "### 6. Installing latest clang and mold..."
+        echo "### 5. Installing latest clang and mold..."
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang mold
-        
-        echo "### Setup complete. Verifying Clang version:"
         clang --version
 
     - name: Setup Python 3.13 for x64
       uses: actions/setup-python@v6
       with:
         python-version: '3.13'
-        architecture: 'x64'
 
     - name: Install Python dependencies
       run: |
