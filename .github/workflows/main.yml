@@ -18,8 +18,6 @@ jobs:
     - name: Prepare System Environment (Global Plucky Upgrade)
       run: |
         echo "### 1. Handling APT source lists for Plucky upgrade..."
-        # First, remove third-party lists to prevent conflicts during the main upgrade.
-        sudo rm -f /etc/apt/sources.list.d/*
         # Second, globally replace 'noble' with 'plucky' in the main OS sources.
         sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list
 
