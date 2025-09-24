@@ -1,4 +1,4 @@
-name: Python Build (x86_64 on Plucky)
+name: Python Build (x86_64 on Plucky with Latest Clang)
 
 on:
   push:
@@ -15,30 +15,50 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Switch to Plucky and Full Upgrade System
+    - name: Prepare System Environment (Global Plucky Upgrade)
       run: |
-        echo "### Changing APT sources from noble to plucky..."
+        echo "### 1. Globally replacing 'noble' with 'plucky' in core OS sources..."
         sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list
-        # The following command may fail if no lists are in the .d directory, so we add a failsafe
-        sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list.d/*.list || echo "No files in sources.list.d to modify."
-        
-        echo "### Updating package lists from plucky repositories..."
+
+        echo "### 2. Handling known third-party repositories..."
+        # Iterate through files in sources.list.d to apply specific fixes
+        for f in /etc/apt/sources.list.d/*.list; do
+          if [ -f "$f" ]; then
+            echo "Processing $f..."
+            # For Microsoft repositories, update both version and codename
+            if grep -q "packages.microsoft.com" "$f"; then
+              echo "-> Found Microsoft repo. Updating to 25.04/plucky."
+              sudo sed -i 's/ubuntu\/24.04\/prod/ubuntu\/25.04\/prod/g' "$f"
+              sudo sed -i 's/noble/plucky/g' "$f"
+            else
+              # For any other repo, apply the general noble -> plucky rule
+              echo "-> Applying general noble->plucky replacement."
+              sudo sed -i 's/noble/plucky/g' "$f"
+            fi
+          fi
+        done
+
+        echo "### 3. Adding the required LLVM APT repository for 'plucky'..."
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/llvm-snapshot.gpg > /dev/null
+        sudo apt-add-repository "deb http://apt.llvm.org/plucky/ llvm-toolchain-plucky main"
+
+        echo "### 4. Updating package lists for the new 'plucky' environment..."
         sudo apt-get update
         
-        echo "### Performing full system upgrade to plucky..."
-        sudo DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -y
+        echo "### 5. Performing full system upgrade to 'plucky'..."
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" full-upgrade -y
         
-        echo "### System upgrade complete."
+        echo "### 6. Installing latest clang and mold..."
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang mold
+        
+        echo "### Setup complete. Verifying Clang version:"
+        clang --version
 
     - name: Setup Python 3.13 for x64
       uses: actions/setup-python@v6
       with:
         python-version: '3.13'
         architecture: 'x64'
-
-    - name: Install build dependencies
-      run: |
-        sudo apt-get install -y clang mold
 
     - name: Install Python dependencies
       run: |
