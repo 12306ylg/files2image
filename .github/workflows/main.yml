@@ -15,33 +15,49 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Prepare System Environment (Global Plucky Upgrade)
+    - name: Prepare System Environment (Global Plucky Upgrade with Exceptions)
       run: |
-        echo "### 1. Correctly applying global 'noble' -> 'plucky' replacement..."
-        # Target the main file AND all files in the sources.list.d directory
+        echo "### 1. Applying 'noble' -> 'plucky' replacement with exceptions..."
+        
+        # Handle the main sources file first
         sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list
-        sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list.d/*.sources
-        sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list.d/*.list
 
-        echo "### 2. Applying specific fix for Microsoft repository..."
-        MS_REPO_FILE="/etc/apt/sources.list.d/microsoft-prod.list"
-        if [ -f "$MS_REPO_FILE" ]; then
-          sudo sed -i 's/ubuntu\/24.04\/prod/ubuntu\/25.04\/prod/g' "$MS_REPO_FILE"
-        fi
+        # Iterate through all source files in the .d directory for surgical replacement
+        for f in /etc/apt/sources.list.d/*; do
+          if [ -f "$f" ]; then
+            # EXCEPTION: Do not touch the azure-cli repository file
+            if [[ "$f" == *azure-cli* ]]; then
+              echo "-> Skipping Azure CLI repository: $f"
+              continue
+            fi
+            
+            # RULE: Handle the Microsoft products repository specifically
+            if [[ "$f" == *microsoft-prod* ]]; then
+              echo "-> Applying Microsoft repo fix to $f (24.04->25.04, noble->plucky)"
+              sudo sed -i 's/ubuntu\/24.04\/prod/ubuntu\/25.04\/prod/g' "$f"
+              sudo sed -i 's/noble/plucky/g' "$f"
+              continue # Move to next file
+            fi
+            
+            # DEFAULT RULE: Apply standard noble -> plucky for all other files
+            echo "-> Applying general noble->plucky replacement to $f"
+            sudo sed -i 's/noble/plucky/g' "$f"
+          fi
+        done
 
-        echo "### 3. Adding the LLVM APT repository using the modern GPG key method..."
-        sudo apt-get update && sudo apt-get install -y gnupg wget # Ensure dependencies are present
+        echo "### 2. Adding the LLVM APT repository for 'plucky'..."
+        sudo apt-get update && sudo apt-get install -y gnupg wget
         sudo mkdir -p /etc/apt/keyrings
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/llvm-snapshot.gpg
         echo "deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] http://apt.llvm.org/plucky/ llvm-toolchain-plucky main" | sudo tee /etc/apt/sources.list.d/llvm.list
 
-        echo "### 4. Updating package lists for the new 'plucky' environment..."
+        echo "### 3. Updating package lists for the new environment..."
         sudo apt-get update
         
-        echo "### 5. Performing full system upgrade to 'plucky'..."
+        echo "### 4. Performing full system upgrade to 'plucky'..."
         sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" full-upgrade -y
         
-        echo "### 6. Installing latest clang and mold..."
+        echo "### 5. Installing latest clang and mold..."
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang mold
         clang --version
 
