@@ -48,7 +48,7 @@ jobs:
           --module \
           --clang \
           --lto=yes \
-          --no-follow-imports \
+          --nofollow-imports \
           main.py
     
     - name: Rename artifact for upload
