@@ -17,25 +17,6 @@ jobs:
 
     - name: Prepare System Environment (Global Plucky Upgrade with Exceptions)
       run: |
-        echo "### 1. Applying 'noble' -> 'plucky' replacement with exceptions..."
-        sudo sed -i 's/noble/plucky/g' /etc/apt/sources.list
-        for f in /etc/apt/sources.list.d/*; do
-          if [ -f "$f" ]; then
-            if [[ "$f" == *azure-cli* ]]; then
-              echo "-> Skipping Azure CLI repository: $f"
-              continue
-            fi
-            if [[ "$f" == *microsoft-prod* ]]; then
-              echo "-> Applying Microsoft repo fix to $f (24.04->25.04, noble->plucky)"
-              sudo sed -i 's/ubuntu\/24.04\/prod/ubuntu\/25.04\/prod/g' "$f"
-              sudo sed -i 's/noble/plucky/g' "$f"
-              continue
-            fi
-            echo "-> Applying general noble->plucky replacement to $f"
-            sudo sed -i 's/noble/plucky/g' "$f"
-          fi
-        done
-
         echo "### 2. Adding the LLVM APT repository for 'plucky'..."
         sudo mkdir -p /etc/apt/keyrings
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/llvm-snapshot.gpg
@@ -67,6 +48,7 @@ jobs:
           --module \
           --clang \
           --lto=yes \
+          --no-follow-imports \
           main.py
     
     - name: Rename artifact for upload
